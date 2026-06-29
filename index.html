@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Research Foundation - Backtest Simulator</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- PapaParse for parsing CSV data client-side -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <i class="fa-solid fa-chart-line logo-icon"></i>
+                <h2>Strategy Simulator</h2>
+            </div>
+            
+            <form id="backtest-form" class="config-form">
+                <div class="form-group">
+                    <label for="asset"><i class="fa-solid fa-coins icon"></i> Asset Universe</label>
+                    <select id="asset" name="asset">
+                        <option value="BTCUSDT">BTCUSDT (Crypto Spot)</option>
+                        <option value="ETHUSDT">ETHUSDT (Crypto Spot)</option>
+                        <option value="TCS">TCS (Indian Equities)</option>
+                        <option value="INFY">INFY (Indian Equities)</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="strategy"><i class="fa-solid fa-brain icon"></i> Strategy Rule</label>
+                    <select id="strategy" name="strategy">
+                        <option value="SMA_Crossover">SMA Crossover (Trend)</option>
+                        <option value="Bollinger_Bands">Bollinger Bands (Reversion)</option>
+                        <option value="Pairs_Trading">Pairs Trading (Stat Arb)</option>
+                    </select>
+                </div>
+                
+                <!-- Dynamic Parameter Blocks -->
+                <div id="param-sma" class="param-block">
+                    <h3>SMA Configuration</h3>
+                    <div class="form-row">
+                        <div class="form-group half">
+                            <label for="sma_fast">Fast Period</label>
+                            <input type="number" id="sma_fast" name="sma_fast" value="50" min="5">
+                        </div>
+                        <div class="form-group half">
+                            <label for="sma_slow">Slow Period</label>
+                            <input type="number" id="sma_slow" name="sma_slow" value="200" min="10">
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="param-bb" class="param-block hidden">
+                    <h3>BB Configuration</h3>
+                    <div class="form-row">
+                        <div class="form-group half">
+                            <label for="bb_period">Period</label>
+                            <input type="number" id="bb_period" name="bb_period" value="20" min="5">
+                        </div>
+                        <div class="form-group half">
+                            <label for="bb_std">Std Dev</label>
+                            <input type="number" id="bb_std" name="bb_std" value="2.0" step="0.1" min="0.5">
+                        </div>
+                    </div>
+                    <div class="form-group checkbox-group">
+                        <input type="checkbox" id="bb_long_only" name="bb_long_only" checked>
+                        <label for="bb_long_only">Long Only Position</label>
+                    </div>
+                </div>
+                
+                <div id="param-pairs" class="param-block hidden">
+                    <h3>Pairs Configuration</h3>
+                    <div class="form-group">
+                        <label for="pairs_window">Lookback Window</label>
+                        <input type="number" id="pairs_window" name="pairs_window" value="60" min="10">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group half">
+                            <label for="pairs_entry_z">Entry Z-Score</label>
+                            <input type="number" id="pairs_entry_z" name="pairs_entry_z" value="1.5" step="0.1" min="0.1">
+                        </div>
+                        <div class="form-group half">
+                            <label for="pairs_exit_z">Exit Z-Score</label>
+                            <input type="number" id="pairs_exit_z" name="pairs_exit_z" value="0.0" step="0.1">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- General Capital / Cost Settings -->
+                <div class="divider"></div>
+                
+                <div class="form-group">
+                    <label for="initial_capital"><i class="fa-solid fa-wallet icon"></i> Initial Capital</label>
+                    <input type="number" id="initial_capital" name="initial_capital" value="100000" min="1000">
+                </div>
+                
+                <div class="form-group">
+                    <label for="slippage_pct"><i class="fa-solid fa-wave-square icon"></i> Est. Slippage (%)</label>
+                    <input type="number" id="slippage_pct" name="slippage_pct" value="0.05" step="0.01" min="0.0">
+                </div>
+                
+                <button type="submit" class="btn-submit">
+                    <span id="btn-text">Run Backtest</span>
+                    <i class="fa-solid fa-play btn-icon"></i>
+                </button>
+            </form>
+            
+            <div class="sidebar-footer">
+                <p>@ 2026 built by Ria Chawak</p>
+            </div>
+        </aside>
+        
+        <!-- Main Dashboard content -->
+        <main class="dashboard-main">
+            <header class="dashboard-header">
+                <div class="header-title">
+                    <h1>Backtest Performance Dashboard</h1>
+                    <p class="subtitle">Evaluate trading rule baseline parameters under realistic transaction costs</p>
+                </div>
+                <div class="market-badge" id="market-badge">
+                    <i class="fa-solid fa-shield-halved"></i>
+                    <span id="market-type-label">Crypto Cost Model</span>
+                </div>
+            </header>
+            
+            <!-- KPI Cards Grid -->
+            <section class="metrics-grid">
+                <div class="kpi-card" id="card-cagr">
+                    <div class="kpi-icon"><i class="fa-solid fa-chart-line"></i></div>
+                    <div class="kpi-info">
+                        <h3>Annualized CAGR</h3>
+                        <p class="kpi-value" id="val-cagr">0.00%</p>
+                    </div>
+                </div>
+                
+                <div class="kpi-card" id="card-sharpe">
+                    <div class="kpi-icon"><i class="fa-solid fa-scale-balanced"></i></div>
+                    <div class="kpi-info">
+                        <h3>Sharpe Ratio</h3>
+                        <p class="kpi-value" id="val-sharpe">0.00</p>
+                    </div>
+                </div>
+                
+                <div class="kpi-card" id="card-sortino">
+                    <div class="kpi-icon"><i class="fa-solid fa-shield"></i></div>
+                    <div class="kpi-info">
+                        <h3>Sortino Ratio</h3>
+                        <p class="kpi-value" id="val-sortino">0.00</p>
+                    </div>
+                </div>
+                
+                <div class="kpi-card negative" id="card-maxdd">
+                    <div class="kpi-icon"><i class="fa-solid fa-arrow-trend-down"></i></div>
+                    <div class="kpi-info">
+                        <h3>Max Drawdown</h3>
+                        <p class="kpi-value" id="val-maxdd">0.00%</p>
+                    </div>
+                </div>
+                
+                <div class="kpi-card" id="card-hitrate">
+                    <div class="kpi-icon"><i class="fa-solid fa-bullseye"></i></div>
+                    <div class="kpi-info">
+                        <h3>Hit Rate</h3>
+                        <p class="kpi-value" id="val-hitrate">0.00%</p>
+                    </div>
+                </div>
+                
+                <div class="kpi-card" id="card-drag">
+                    <div class="kpi-icon"><i class="fa-solid fa-anchor"></i></div>
+                    <div class="kpi-info">
+                        <h3>Transaction Drag</h3>
+                        <p class="kpi-value" id="val-drag">0.00%</p>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Charts Section -->
+            <section class="charts-section">
+                <div class="chart-container glass-card">
+                    <div class="chart-header">
+                        <h2><i class="fa-solid fa-chart-area icon"></i> Equity Curve Evolution</h2>
+                        <span class="legend-indicator"><span class="gross-dot"></span> Gross vs <span class="net-dot"></span> Net</span>
+                    </div>
+                    <div class="canvas-wrapper">
+                        <canvas id="equityChart"></canvas>
+                    </div>
+                </div>
+                
+                <div class="chart-container glass-card">
+                    <div class="chart-header">
+                        <h2><i class="fa-solid fa-arrow-down-wide-narrow icon"></i> Drawdown Profile (%)</h2>
+                    </div>
+                    <div class="canvas-wrapper">
+                        <canvas id="drawdownChart"></canvas>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Trades Table -->
+            <section class="trades-section glass-card">
+                <div class="trades-header">
+                    <h2><i class="fa-solid fa-receipt icon"></i> Transaction Log</h2>
+                    <span class="trades-count" id="trades-count">0 Trades Executed</span>
+                </div>
+                <div class="table-wrapper">
+                    <table class="trades-table" id="trades-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Action</th>
+                                <th>Price</th>
+                                <th>Quantity</th>
+                                <th>Value</th>
+                                <th>Fees Paid</th>
+                                <th>Cash Balance</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trades-body">
+                            <tr>
+                                <td colspan="7" class="empty-state">No simulation results. Click "Run Backtest" to begin.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
